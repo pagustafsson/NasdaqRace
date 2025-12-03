@@ -1,0 +1,7 @@
+nasdaq_data.json
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+env/
+nasdaq_race_project.zip

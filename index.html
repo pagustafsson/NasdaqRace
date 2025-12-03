@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nasdaq 100 Bar Chart Race</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Nasdaq 100 Market Cap Race (5 Years)</h1>
+        <div id="chart-container">
+            <div id="ticker-date">Loading...</div>
+            <div id="chart"></div>
+        </div>
+        <div class="controls">
+            <button id="play-pause-btn">Play</button>
+            <input type="range" id="date-slider" min="0" max="100" value="0">
+            <select id="speed-selector">
+                <option value="1">1x Speed</option>
+                <option value="2">2x Speed</option>
+                <option value="5">5x Speed</option>
+                <option value="10">10x Speed</option>
+            </select>
+        </div>
+    </div>
+    <script>
+        // Configuration
+        const topN = 12;
+        const baseDuration = 250; // ms per frame at 1x
+        let duration = baseDuration;
+        const width = 1000;
+        const height = 600;
+        const margin = { top: 20, right: 30, bottom: 30, left: 150 };
+
+        let svg, x, y, xAxis, yAxis;
+        let dateLabel;
+        let tickerData = [];
+        let dateList = [];
+        let currentFrame = 0;
+        let intervalId = null;
+        let isPlaying = false;
+
+        // Removed colorScale for B&W theme
+
+        async function init() {
+            const data = await d3.json("nasdaq_data.json");
+
+            // Group data by date
+            const grouped = d3.group(data, d => d.date);
+            dateList = Array.from(grouped.keys()).sort();
+
+            // Pre-process data for each frame
+            tickerData = dateList.map(date => {
+                let items = grouped.get(date);
+                items.sort((a, b) => b.value - a.value);
+                // Assign ranks
+                items.forEach((d, i) => d.rank = i);
+                return {
+                    date: date,
+                    items: items
+                };
+            });
+
+            setupChart();
+            update(0);
+
+            // Controls
+            const btn = document.getElementById('play-pause-btn');
+            const slider = document.getElementById('date-slider');
+            const speedSel = document.getElementById('speed-selector');
+
+            slider.max = dateList.length - 1;
+
+            btn.addEventListener('click', () => {
+                if (isPlaying) {
+                    stopAnimation();
+                } else {
+                    startAnimation();
+                }
+            });
+
+            slider.addEventListener('input', (e) => {
+                stopAnimation();
+                currentFrame = +e.target.value;
+                update(currentFrame);
+            });
+
+            speedSel.addEventListener('change', (e) => {
+                const speed = +e.target.value;
+                duration = baseDuration / speed;
+                // If playing, restart to apply new speed
+                if (isPlaying) {
+                    stopAnimation();
+                    startAnimation();
+                }
+            });
+        }
+
+        function setupChart() {
+            svg = d3.select("#chart")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            x = d3.scaleLinear()
+                .range([margin.left, width - margin.right]);
+
+            y = d3.scaleBand()
+                .range([margin.top, height - margin.bottom])
+                .padding(0.4); // Increased padding for thinner bars
+
+            dateLabel = d3.select("#ticker-date");
+        }
+
+        function formatCurrency(value) {
+            if (value >= 1e12) return (value / 1e12).toFixed(2) + " T";
+            if (value >= 1e9) return (value / 1e9).toFixed(1) + " B";
+            return (value / 1e6).toFixed(0) + " M";
+        }
+
+        function update(frameIndex) {
+            const frameData = tickerData[frameIndex];
+            const topData = frameData.items.slice(0, topN); // Only take top N
+
+            // Update slider and date label
+            document.getElementById('date-slider').value = frameIndex;
+            dateLabel.text(frameData.date);
+
+            // Update scales
+            x.domain([0, d3.max(topData, d => d.value)]);
+            y.domain(d3.range(topN)); // 0 to 11
+
+            // Bind data
+            // Key function is important for object constancy (tracking same company across frames)
+            const bars = svg.selectAll(".bar-group")
+                .data(topData, d => d.name);
+
+            // ENTER
+            const enter = bars.enter()
+                .append("g")
+                .attr("class", "bar-group")
+                .attr("transform", (d, i) => `translate(0, ${y(i)})`); // Initial position
+
+            enter.append("rect")
+                .attr("class", "bar")
+                .attr("height", y.bandwidth())
+                .attr("x", x(0))
+                .attr("width", d => x(d.value) - x(0))
+                .attr("fill", "#ffffff") // White bars
+                .attr("rx", y.bandwidth() / 2) // Pill shape
+                .attr("ry", y.bandwidth() / 2);
+
+            enter.append("text")
+                .attr("class", "label")
+                .attr("x", margin.left - 10)
+                .attr("y", y.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .attr("text-anchor", "end")
+                .text(d => d.name);
+
+            enter.append("text")
+                .attr("class", "value")
+                .attr("x", d => x(d.value) + 10) // More space
+                .attr("y", y.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .text(d => formatCurrency(d.value));
+
+            // UPDATE
+            const updateSelection = bars.merge(enter);
+
+            updateSelection.transition().duration(duration).ease(d3.easeLinear)
+                .attr("transform", (d, i) => `translate(0, ${y(i)})`); // Move to new rank position
+
+            updateSelection.select(".bar")
+                .transition().duration(duration).ease(d3.easeLinear)
+                .attr("width", d => x(d.value) - x(0));
+
+            updateSelection.select(".value")
+                .transition().duration(duration).ease(d3.easeLinear)
+                .attr("x", d => x(d.value) + 10)
+                .tween("text", function (d) {
+                    const i = d3.interpolateNumber(parseFloat(this.textContent.replace(/[TBM ]/g, '')) * (this.textContent.includes('T') ? 1e12 : 1e9), d.value);
+                    return function (t) {
+                        this.textContent = formatCurrency(i(t));
+                    };
+                });
+
+            // EXIT
+            bars.exit()
+                .transition().duration(duration)
+                .attr("transform", `translate(0, ${height})`) // Drop off bottom
+                .remove();
+        }
+
+        function startAnimation() {
+            if (isPlaying) return;
+            isPlaying = true;
+            document.getElementById('play-pause-btn').textContent = "Pause";
+
+            intervalId = setInterval(() => {
+                currentFrame++;
+                if (currentFrame >= tickerData.length) {
+                    stopAnimation();
+                    currentFrame = 0; // Reset or stay at end? Let's stay at end.
+                    return;
+                }
+                update(currentFrame);
+            }, duration);
+        }
+
+        function stopAnimation() {
+            isPlaying = false;
+            document.getElementById('play-pause-btn').textContent = "Play";
+            clearInterval(intervalId);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
