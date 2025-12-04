@@ -80,6 +80,10 @@ def process_data(price_data, shares_data, sectors_data):
     """Calculates market cap and formats for JSON."""
     output = []
     
+    # Calculate 90-day rolling growth (percentage change)
+    # We use periods=63 because ~63 trading days in 90 calendar days
+    growth_data = price_data.pct_change(periods=63)
+    
     # price_data is a DataFrame with Date index and Ticker columns
     # We need to iterate over dates
     
@@ -101,12 +105,18 @@ def process_data(price_data, shares_data, sectors_data):
             # Filter out zero or tiny market caps (bad data)
             if market_cap < 1_000_000: 
                 continue
+            
+            # Get growth value
+            growth = growth_data.loc[date, ticker]
+            if pd.isna(growth):
+                growth = 0
                 
             entry = {
                 "date": date_str,
                 "name": ticker,
                 "category": sectors_data.get(ticker, 'Unknown'),
-                "value": market_cap
+                "value": market_cap,
+                "growth": growth
             }
             output.append(entry)
             
