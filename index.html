@@ -3,27 +3,26 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Nasdaq 100 Bar Chart Race</title>
-    <link rel="stylesheet" href="styles.css?v=2">
+    <link rel="stylesheet" href="styles.css?v=6">
     <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 
 <body>
+    <!-- Info Button (Fixed Position) -->
+    <button id="info-btn" class="icon-btn" aria-label="Information">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+    </button>
+
     <div class="container">
         <div class="header-row">
-            <div class="header-spacer"></div>
             <h1>Nasdaq 100 Market Cap Race (30 Years)</h1>
-            <div class="header-controls">
-                <button id="info-btn" class="icon-btn" aria-label="Information">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
-                </button>
-            </div>
         </div>
         <div id="chart-container">
             <div id="ticker-date">Loading...</div>
@@ -80,13 +79,45 @@
         </div>
     </div>
     <script>
-        // Configuration
-        const topN = 12;
+        // Configuration - Responsive dimensions
+        function getResponsiveDimensions() {
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            if (viewportWidth <= 480) {
+                // Mobile
+                return {
+                    topN: 8,
+                    width: viewportWidth - 20,
+                    height: Math.min(viewportHeight * 0.6, 500),
+                    margin: { top: 10, right: 60, bottom: 20, left: 80 }
+                };
+            } else if (viewportWidth <= 768) {
+                // Tablet
+                return {
+                    topN: 10,
+                    width: viewportWidth - 40,
+                    height: Math.min(viewportHeight * 0.65, 550),
+                    margin: { top: 15, right: 80, bottom: 25, left: 100 }
+                };
+            } else {
+                // Desktop
+                return {
+                    topN: 12,
+                    width: Math.min(viewportWidth - 100, 1000),
+                    height: 600,
+                    margin: { top: 20, right: 100, bottom: 30, left: 150 }
+                };
+            }
+        }
+
+        let dimensions = getResponsiveDimensions();
+        let topN = dimensions.topN;
         const baseDuration = 250; // ms per frame at 1x
         let duration = baseDuration;
-        const width = 1000;
-        const height = 600;
-        const margin = { top: 20, right: 100, bottom: 30, left: 150 };
+        let width = dimensions.width;
+        let height = dimensions.height;
+        let margin = dimensions.margin;
 
         let svg, x, y, xAxis, yAxis;
         let dateLabel;
@@ -216,6 +247,29 @@
                 }
             });
         }
+
+        // Handle window resize
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                const newDimensions = getResponsiveDimensions();
+
+                // Only reload if dimensions actually changed
+                if (newDimensions.width !== width || newDimensions.height !== height || newDimensions.topN !== topN) {
+                    dimensions = newDimensions;
+                    topN = dimensions.topN;
+                    width = dimensions.width;
+                    height = dimensions.height;
+                    margin = dimensions.margin;
+
+                    // Rebuild chart
+                    d3.select("#chart").selectAll("*").remove();
+                    setupChart();
+                    update(currentFrame, 0);
+                }
+            }, 250);
+        });
 
         function setupChart() {
             svg = d3.select("#chart")
