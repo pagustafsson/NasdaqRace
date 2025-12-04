@@ -54,29 +54,36 @@ def fetch_data(tickers):
     # If we use current shares * historical adjusted price, it's a common approximation 
     # because 'Adj Close' back-adjusts the price as if the split happened in the past.
     
-    data = yf.download(tickers, period="5y", interval="1d", auto_adjust=True, threads=True)['Close']
+    # Download historical price data
+    # 'Adj Close' is best for market cap calc as it accounts for splits/dividends roughly.
+    # We fetch data from 1995-01-01 (approx 30 years)
+    print("Downloading historical data from 1995-01-01...")
+    data = yf.download(tickers, start="1995-01-01", interval="1d", auto_adjust=True, threads=True)['Close']
     
-    # Fetch current shares outstanding
+    # Fetch current shares outstanding and full name
     shares = {}
     sectors = {}
+    names = {}
     
     # We need to fetch info one by one or in small batches for metadata
     # yfinance Ticker object is needed for info
-    print("Fetching metadata (shares, sector)...")
+    print("Fetching metadata (shares, sector, name)...")
     for ticker in tickers:
         try:
             t = yf.Ticker(ticker)
             info = t.info
             shares[ticker] = info.get('sharesOutstanding', 0)
             sectors[ticker] = info.get('sector', 'Unknown')
+            names[ticker] = info.get('longName', ticker)
         except Exception as e:
             print(f"Could not get info for {ticker}: {e}")
             shares[ticker] = 0
             sectors[ticker] = 'Unknown'
+            names[ticker] = ticker
             
-    return data, shares, sectors
+    return data, shares, sectors, names
 
-def process_data(price_data, shares_data, sectors_data):
+def process_data(price_data, shares_data, sectors_data, names_data):
     """Calculates market cap, merges dual-class stocks, and formats for JSON."""
     output = []
     
@@ -96,12 +103,14 @@ def process_data(price_data, shares_data, sectors_data):
         market_cap_df['GOOG(L)'] = market_cap_df['GOOG'] + market_cap_df['GOOGL']
         market_cap_df.drop(columns=['GOOG', 'GOOGL'], inplace=True)
         sectors_data['GOOG(L)'] = sectors_data.get('GOOG', 'Technology')
+        names_data['GOOG(L)'] = names_data.get('GOOG', 'Alphabet Inc.')
 
     # FOX + FOXA -> FOX(A)
     if 'FOX' in market_cap_df.columns and 'FOXA' in market_cap_df.columns:
         market_cap_df['FOX(A)'] = market_cap_df['FOX'] + market_cap_df['FOXA']
         market_cap_df.drop(columns=['FOX', 'FOXA'], inplace=True)
         sectors_data['FOX(A)'] = sectors_data.get('FOX', 'Communication Services')
+        names_data['FOX(A)'] = names_data.get('FOX', 'Fox Corporation')
 
     # 3. Calculate 90-day rolling growth on the MERGED market caps
     growth_data = market_cap_df.pct_change(periods=63)
@@ -124,6 +133,7 @@ def process_data(price_data, shares_data, sectors_data):
             entry = {
                 "date": date_str,
                 "name": ticker,
+                "fullname": names_data.get(ticker, ticker),
                 "category": sectors_data.get(ticker, 'Unknown'),
                 "value": market_cap,
                 "growth": growth
@@ -139,10 +149,10 @@ def main():
     # Limit for testing if needed, but user asked for full list. 
     # Let's do full list.
     
-    price_data, shares_data, sectors_data = fetch_data(tickers)
+    price_data, shares_data, sectors_data, names_data = fetch_data(tickers)
     
     print("Processing data...")
-    json_data = process_data(price_data, shares_data, sectors_data)
+    json_data = process_data(price_data, shares_data, sectors_data, names_data)
     
     output_file = "nasdaq_data.json"
     with open(output_file, "w") as f:

@@ -1,3 +1,8 @@
+```css html {
+    background-color: #000000;
+    width: 100%;
+}
+
 body {
     font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
     /* Clean sans-serif */
@@ -8,6 +13,10 @@ body {
     align-items: center;
     min-height: 100vh;
     margin: 0;
+    width: 100%;
+    /* Force full width */
+    overflow-x: hidden;
+    /* Prevent horizontal scroll from tooltip */
 }
 
 .container {
@@ -101,8 +110,31 @@ button:hover {
     opacity: 0.8;
 }
 
+/* Tooltip */
+.tooltip {
+    position: fixed;
+    /* Fixed to viewport to prevent scrollbars */
+    text-align: center;
+    padding: 8px 12px;
+    font: 14px 'Inter', sans-serif;
+    background: #333;
+    color: #fff;
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    /* High z-index */
+    transform: translate(-50%, -100%);
+    /* Center horizontally, place above cursor by default */
+    margin-top: -10px;
+    /* Spacing */
+}
+
 input[type=range] {
     -webkit-appearance: none;
+    appearance: none;
     width: 400px;
     background: transparent;
 }

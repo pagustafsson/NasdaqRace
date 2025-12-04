@@ -5,13 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nasdaq 100 Bar Chart Race</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2">
     <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 
 <body>
     <div class="container">
-        <h1>Nasdaq 100 Market Cap Race (5 Years)</h1>
+        <h1>Nasdaq 100 Market Cap Race (30 Years)</h1>
         <div id="chart-container">
             <div id="ticker-date">Loading...</div>
             <div id="chart"></div>
@@ -44,7 +44,14 @@
         let intervalId = null;
         let isPlaying = false;
 
-        // Removed colorScale for B&W theme
+        // Tooltip div
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        // Scroll state
+        let viewOffset = 0;
+        let maxRank = 0;
 
         async function init() {
             const data = await d3.json("nasdaq_data.json?" + new Date().getTime());
@@ -64,6 +71,9 @@
                     items: items
                 };
             });
+
+            // Determine max rank for scrolling
+            maxRank = d3.max(tickerData, d => d.items.length) - 1;
 
             setupChart();
             update(0);
@@ -98,6 +108,38 @@
                     startAnimation();
                 }
             });
+
+            // Mouse Wheel Scrolling
+            let scrollAccumulator = 0;
+            const scrollThreshold = 50; // Higher = slower scroll
+
+            d3.select(window).on("wheel", (e) => {
+                // Only prevent default if we are actually scrolling the chart
+                // But since body overflow is hidden, we can just prevent default always to avoid bounce
+                e.preventDefault();
+
+                scrollAccumulator += e.deltaY;
+
+                if (Math.abs(scrollAccumulator) < scrollThreshold) return;
+
+                const direction = scrollAccumulator > 0 ? 1 : -1;
+                scrollAccumulator = 0; // Reset
+
+                let newOffset = viewOffset + direction;
+
+                // Clamp
+                const currentTotal = tickerData[currentFrame].items.length;
+                const maxOffset = Math.max(0, currentTotal - topN);
+
+                if (newOffset < 0) newOffset = 0;
+                if (newOffset > maxOffset) newOffset = maxOffset;
+
+                if (newOffset !== viewOffset) {
+                    viewOffset = newOffset;
+                    // Update immediately with 0 duration to prevent "sticking" artifacts
+                    update(currentFrame, 0);
+                }
+            });
         }
 
         function setupChart() {
@@ -111,7 +153,7 @@
 
             y = d3.scaleBand()
                 .range([margin.top, height - margin.bottom])
-                .padding(0.4); // Increased padding for thinner bars
+                .padding(0.4);
 
             dateLabel = d3.select("#ticker-date");
         }
@@ -122,41 +164,85 @@
             return (value / 1e6).toFixed(0) + " M";
         }
 
-        function update(frameIndex) {
+        function update(frameIndex, transitionDuration = duration) {
             const frameData = tickerData[frameIndex];
-            const topData = frameData.items.slice(0, topN); // Only take top N
+
+            // Slice data based on viewOffset
+            const visibleItems = frameData.items.slice(viewOffset, viewOffset + topN);
 
             // Update slider and date label
             document.getElementById('date-slider').value = frameIndex;
             dateLabel.text(frameData.date);
 
             // Update scales
-            x.domain([0, d3.max(topData, d => d.value)]);
-            y.domain(d3.range(topN)); // 0 to 11
+            const maxVal = visibleItems.length > 0 ? visibleItems[0].value : 0;
+            x.domain([0, maxVal]);
+            y.domain(d3.range(topN));
 
             // Bind data
-            // Key function is important for object constancy (tracking same company across frames)
             const bars = svg.selectAll(".bar-group")
-                .data(topData, d => d.name);
-
-            // Find max growth in this frame
-            const maxGrowth = d3.max(topData, d => d.growth);
+                .data(visibleItems, d => d.name);
 
             // ENTER
             const enter = bars.enter()
                 .append("g")
                 .attr("class", "bar-group")
-                .attr("transform", (d, i) => `translate(0, ${y(i)})`); // Initial position
+                .attr("transform", (d, i) => `translate(0, ${y(i)})`)
+                .on("mouseover", function (event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+
+                    tooltip.html(d.fullname);
+
+                    // Use client coordinates for fixed positioning
+                    const x = event.clientX;
+                    const y = event.clientY;
+
+                    // Clamp to window bounds to prevent any potential overflow issues
+                    // (though fixed position shouldn't trigger scroll, this is safer)
+                    const windowWidth = window.innerWidth;
+                    const tooltipWidth = 200; // Approx max width
+
+                    let finalX = x;
+                    if (x > windowWidth - 100) {
+                        finalX = windowWidth - 100;
+                    }
+                    if (x < 100) {
+                        finalX = 100;
+                    }
+
+                    tooltip.style("left", finalX + "px")
+                        .style("top", y + "px");
+                })
+                .on("mouseout", function (d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+
+            // Removed native title
 
             enter.append("rect")
                 .attr("class", "bar")
                 .attr("height", y.bandwidth())
                 .attr("x", x(0))
                 .attr("width", d => x(d.value) - x(0))
-                .attr("fill", d => d.growth === maxGrowth && d.growth > 0 ? "#00ff00" : "#ffffff") // Green if fastest growing
-                .attr("rx", y.bandwidth() / 2) // Pill shape
+                .attr("fill", "#ffffff") // Always white
+                .attr("rx", y.bandwidth() / 2)
                 .attr("ry", y.bandwidth() / 2);
 
+            // Rank Number (Static column)
+            enter.append("text")
+                .attr("class", "rank-label")
+                .attr("x", margin.left - 120) // Fixed position on left
+                .attr("y", y.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .attr("text-anchor", "start") // Left align
+                .style("fill", "#888") // Grey color for rank
+                .text(d => d.rank + 1);
+
+            // Company Name
             enter.append("text")
                 .attr("class", "label")
                 .attr("x", margin.left - 10)
@@ -167,7 +253,7 @@
 
             enter.append("text")
                 .attr("class", "value")
-                .attr("x", d => x(d.value) + 10) // More space
+                .attr("x", d => x(d.value) + 10)
                 .attr("y", y.bandwidth() / 2)
                 .attr("dy", "0.35em")
                 .text(d => formatCurrency(d.value));
@@ -175,22 +261,42 @@
             // UPDATE
             const updateSelection = bars.merge(enter);
 
-            // Re-calculate max growth for update selection in case it changed (though frame is static per update call)
-            // Actually we need to update the fill for existing bars too
-
-            updateSelection.transition().duration(duration).ease(d3.easeLinear)
-                .attr("transform", (d, i) => `translate(0, ${y(i)})`); // Move to new rank position
+            updateSelection.transition().duration(transitionDuration).ease(d3.easeLinear)
+                .attr("transform", (d, i) => `translate(0, ${y(i)})`);
 
             updateSelection.select(".bar")
-                .transition().duration(duration).ease(d3.easeLinear)
+                .transition().duration(transitionDuration).ease(d3.easeLinear)
                 .attr("width", d => x(d.value) - x(0))
-                .attr("fill", d => d.growth === maxGrowth && d.growth > 0 ? "#00ff00" : "#ffffff");
+                .attr("fill", "#ffffff");
+
+            updateSelection.select(".rank-label")
+                .text(d => d.rank + 1); // Update rank
+
+            updateSelection.select(".label")
+                .text(d => d.name);
+
+            // Update tooltip content if hovering during update? 
+            // Usually not needed as data is bound to element.
 
             updateSelection.select(".value")
-                .transition().duration(duration).ease(d3.easeLinear)
+                .transition().duration(transitionDuration).ease(d3.easeLinear)
                 .attr("x", d => x(d.value) + 10)
                 .tween("text", function (d) {
-                    const i = d3.interpolateNumber(parseFloat(this.textContent.replace(/[TBM ]/g, '')) * (this.textContent.includes('T') ? 1e12 : 1e9), d.value);
+                    const currentText = this.textContent;
+                    let oldVal = parseFloat(currentText);
+
+                    if (currentText.includes("T")) {
+                        oldVal *= 1e12;
+                    } else if (currentText.includes("B")) {
+                        oldVal *= 1e9;
+                    } else if (currentText.includes("M")) {
+                        oldVal *= 1e6;
+                    } else {
+                        // Fallback or 0 if NaN
+                        oldVal = oldVal || 0;
+                    }
+
+                    const i = d3.interpolateNumber(oldVal, d.value);
                     return function (t) {
                         this.textContent = formatCurrency(i(t));
                     };
@@ -198,8 +304,6 @@
 
             // EXIT
             bars.exit()
-                .transition().duration(duration)
-                .attr("transform", `translate(0, ${height})`) // Drop off bottom
                 .remove();
         }
 
