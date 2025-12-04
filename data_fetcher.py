@@ -77,36 +77,46 @@ def fetch_data(tickers):
     return data, shares, sectors
 
 def process_data(price_data, shares_data, sectors_data):
-    """Calculates market cap and formats for JSON."""
+    """Calculates market cap, merges dual-class stocks, and formats for JSON."""
     output = []
     
-    # Calculate 90-day rolling growth (percentage change)
-    # We use periods=63 because ~63 trading days in 90 calendar days
-    growth_data = price_data.pct_change(periods=63)
+    # 1. Calculate Market Cap DataFrame
+    # Align shares data with price columns
+    shares_series = pd.Series(shares_data)
+    # Ensure we only use shares for tickers present in price_data
+    common_tickers = price_data.columns.intersection(shares_series.index)
     
-    # price_data is a DataFrame with Date index and Ticker columns
-    # We need to iterate over dates
+    # Calculate market cap (Price * Shares)
+    # We use broadcast multiplication
+    market_cap_df = price_data[common_tickers].mul(shares_series[common_tickers], axis=1)
     
-    for date, row in price_data.iterrows():
+    # 2. Merge Dual-Class Stocks
+    # GOOG + GOOGL -> GOOG(L)
+    if 'GOOG' in market_cap_df.columns and 'GOOGL' in market_cap_df.columns:
+        market_cap_df['GOOG(L)'] = market_cap_df['GOOG'] + market_cap_df['GOOGL']
+        market_cap_df.drop(columns=['GOOG', 'GOOGL'], inplace=True)
+        sectors_data['GOOG(L)'] = sectors_data.get('GOOG', 'Technology')
+
+    # FOX + FOXA -> FOX(A)
+    if 'FOX' in market_cap_df.columns and 'FOXA' in market_cap_df.columns:
+        market_cap_df['FOX(A)'] = market_cap_df['FOX'] + market_cap_df['FOXA']
+        market_cap_df.drop(columns=['FOX', 'FOXA'], inplace=True)
+        sectors_data['FOX(A)'] = sectors_data.get('FOX', 'Communication Services')
+
+    # 3. Calculate 90-day rolling growth on the MERGED market caps
+    growth_data = market_cap_df.pct_change(periods=63)
+    
+    # 4. Format for JSON
+    for date, row in market_cap_df.iterrows():
         date_str = date.strftime('%Y-%m-%d')
         
-        for ticker in price_data.columns:
-            price = row[ticker]
+        for ticker in market_cap_df.columns:
+            market_cap = row[ticker]
             
-            # Skip if price is NaN
-            if pd.isna(price):
-                continue
-                
-            share_count = shares_data.get(ticker, 0)
-            if share_count is None: share_count = 0
-            
-            market_cap = price * share_count
-            
-            # Filter out zero or tiny market caps (bad data)
-            if market_cap < 1_000_000: 
+            # Skip if NaN or too small
+            if pd.isna(market_cap) or market_cap < 1_000_000:
                 continue
             
-            # Get growth value
             growth = growth_data.loc[date, ticker]
             if pd.isna(growth):
                 growth = 0
