@@ -332,17 +332,17 @@ h1 {
 
     #play-pause-btn {
         order: 2;
-        width: 48%;
-        /* Slightly less than 50% to account for gap if any, but space-between handles it */
-        flex: 1 0 45%;
+        width: 45%;
+        /* Safe margin to prevent wrapping */
+        flex: 0 0 45%;
         padding: 12px 0;
         font-size: 14px;
     }
 
     #speed-selector {
         order: 3;
-        width: 48%;
-        flex: 1 0 45%;
+        width: 45%;
+        flex: 0 0 45%;
         font-size: 14px;
         padding: 10px 0;
     }
