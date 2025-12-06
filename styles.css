@@ -307,6 +307,9 @@ h1 {
     }
 
     .controls {
+        margin-top: 0px;
+        /* Reduced from default 40px */
+        padding-top: 0px;
         display: flex;
         flex-wrap: wrap;
         width: 100%;
