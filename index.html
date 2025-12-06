@@ -22,7 +22,7 @@
         content="A visualization of the Nasdaq 100 market capitalization history. Vibe Coded by P-A Gustafsson.">
     <meta property="twitter:image" content="https://pagustafsson.github.io/NasdaqRace/og-image.jpg">
 
-    <link rel="stylesheet" href="styles.css?v=17">
+    <link rel="stylesheet" href="styles.css?v=21">
     <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 
@@ -104,7 +104,7 @@
             if (viewportWidth <= 480) {
                 // Mobile
                 return {
-                    topN: 10,
+                    topN: 12,
                     width: viewportWidth - 20,
                     height: Math.min(viewportHeight * 0.6, 500),
                     margin: { top: 0, right: 60, bottom: 0, left: 80 }
@@ -112,7 +112,7 @@
             } else if (viewportWidth <= 768) {
                 // Tablet
                 return {
-                    topN: 10,
+                    topN: 12,
                     width: viewportWidth - 40,
                     height: Math.min(viewportHeight * 0.65, 550),
                     margin: { top: 15, right: 80, bottom: 25, left: 100 }
