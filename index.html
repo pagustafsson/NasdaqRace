@@ -22,11 +22,14 @@
         content="A visualization of the Nasdaq 100 market capitalization history. Vibe Coded by P-A Gustafsson.">
     <meta property="twitter:image" content="https://pagustafsson.github.io/NasdaqRace/og-image.jpg">
 
-    <link rel="stylesheet" href="styles.css?v=21">
+    <link rel="stylesheet" href="styles.css?v=26">
     <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 
 <body>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+    </div>
     <!-- Info Button (Fixed Position) -->
     <button id="info-btn" class="icon-btn" aria-label="Information">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -177,6 +180,11 @@
 
             setupChart();
             update(0);
+
+            // Hide Loader
+            setTimeout(() => {
+                document.getElementById('loading-overlay').classList.add('hidden');
+            }, 100); // Slight buffer ensures repaint
 
             // Controls
             const btn = document.getElementById('play-pause-btn');
