@@ -1,25 +1,51 @@
 # Nasdaq 100 Bar Chart Race
 
-A visualization of the Nasdaq 100 market capitalization history over the last 5 years.
+An animated visualization of the Nasdaq 100 market capitalization history from 1995 to present.
 
-## Vibe Coded by P-A Gustafsson
-[Connect on LinkedIn](https://www.linkedin.com/in/pagustafsson/)
+## 🚀 Live Demo
 
-## How to Run
+**[View Live →](https://pagustafsson.github.io/NasdaqRace/)**
 
-1.  **Install Dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
+## ✨ Features
 
-2.  **Fetch Data**:
-    ```bash
-    python data_fetcher.py
-    ```
+- **Animated Bar Chart Race**: Watch companies rise and fall over 30 years
+- **Speed Controls**: 1x, 2x, 5x, 10x playback speed
+- **Interactive Slider**: Scrub to any date in history
+- **Daily Auto-Updates**: GitHub Actions fetches fresh market data daily
 
-3.  **Run Visualization**:
-    Start a local server to avoid CORS issues:
-    ```bash
-    python3 -m http.server 8000
-    ```
-    Then open [http://localhost:8000](http://localhost:8000).
+## 📊 About the Data
+
+This visualization displays the historical market capitalization of companies **currently listed** in the Nasdaq 100. Due to limitations in free historical data sources, delisted companies (e.g., Sun Microsystems, AOL) are not included—resulting in "survivorship bias."
+
+## 🛠️ How to Run Locally
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/pagustafsson/NasdaqRace.git
+   cd NasdaqRace
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Fetch data** (optional, pre-fetched data included):
+   ```bash
+   python data_fetcher.py
+   ```
+
+4. **Start local server**:
+   ```bash
+   python3 -m http.server 8000
+   ```
+   Then open [http://localhost:8000](http://localhost:8000)
+
+## 🔄 Automatic Data Updates
+
+A GitHub Action runs **every Friday** at 22:01 CET to fetch the latest market data and commit updates automatically.
+
+## 👤 Vibe Coded by P-A Gustafsson
+
+- [LinkedIn](https://www.linkedin.com/in/pagustafsson/)
+- [X (Twitter)](https://x.com/pagustafsson)
