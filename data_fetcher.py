@@ -3,6 +3,8 @@ import pandas as pd
 import json
 import datetime
 import ssl
+import os
+import sys
 
 def get_nasdaq_tickers():
     """Scrapes Nasdaq 100 tickers from Wikipedia."""
@@ -21,7 +23,7 @@ def get_nasdaq_tickers():
         tables = pd.read_html(StringIO(response.text))
 
         # The first table usually contains the tickers
-        df = tables[4] # Index 4 is usually the constituents table, but let's check columns to be safe or try multiple
+        # Index 4 is usually the constituents table, but let's check columns to be safe or try multiple
         
         # Heuristic to find the right table
         target_df = None
@@ -43,23 +45,24 @@ def get_nasdaq_tickers():
         # Fallback list of top tech stocks if scraping fails (just to ensure script runs)
         return ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO", "PEP", "COST"]
 
-def fetch_data(tickers):
-    """Fetches 5y historical data and current shares outstanding."""
-    print(f"Fetching data for {len(tickers)} tickers...")
-    
-    # Download historical price data
-    # 'Adj Close' is best for market cap calc as it accounts for splits/dividends roughly, 
-    # but strictly speaking Market Cap = Price * Shares. 
-    # However, yfinance 'Adj Close' is adjusted for splits. 
-    # If we use current shares * historical adjusted price, it's a common approximation 
-    # because 'Adj Close' back-adjusts the price as if the split happened in the past.
+def fetch_data(tickers, start_date="1995-01-01"):
+    """Fetches historical data from start_date and current shares outstanding."""
+    print(f"Fetching data for {len(tickers)} tickers starting from {start_date}...")
     
     # Download historical price data
     # 'Adj Close' is best for market cap calc as it accounts for splits/dividends roughly.
-    # We fetch data from 1995-01-01 (approx 30 years)
-    print("Downloading historical data from 1995-01-01...")
-    data = yf.download(tickers, start="1995-01-01", interval="1d", auto_adjust=True, threads=True)['Close']
-    
+    print(f"Downloading historical data from {start_date}...")
+    try:
+        data = yf.download(tickers, start=start_date, interval="1d", auto_adjust=True, threads=True)['Close']
+    except Exception as e:
+        print(f"Error downloading data: {e}")
+        # Return empty DataFrame if download fails completely
+        return pd.DataFrame(), {}, {}, {}
+
+    if data.empty:
+        print("No new data found.")
+        return data, {}, {}, {}
+
     # Fetch current shares outstanding and full name
     shares = {}
     sectors = {}
@@ -76,7 +79,7 @@ def fetch_data(tickers):
             sectors[ticker] = info.get('sector', 'Unknown')
             names[ticker] = info.get('longName', ticker)
         except Exception as e:
-            print(f"Could not get info for {ticker}: {e}")
+            # print(f"Could not get info for {ticker}: {e}") # Reduce noise
             shares[ticker] = 0
             sectors[ticker] = 'Unknown'
             names[ticker] = ticker
@@ -87,6 +90,9 @@ def process_data(price_data, shares_data, sectors_data, names_data):
     """Calculates market cap, merges dual-class stocks, and formats for JSON."""
     output = []
     
+    if price_data.empty:
+        return []
+
     # 1. Calculate Market Cap DataFrame
     # Align shares data with price columns
     shares_series = pd.Series(shares_data)
@@ -113,6 +119,19 @@ def process_data(price_data, shares_data, sectors_data, names_data):
         names_data['FOX(A)'] = names_data.get('FOX', 'Fox Corporation')
 
     # 3. Calculate 90-day rolling growth on the MERGED market caps
+    # Note: For incremental updates, growth calculation might be inaccurate for the first few days 
+    # if we don't have enough history. But since we append, it's okay.
+    # Ideally we should fetch a bit of overlap for growth calc, but for simplicity we'll accept 
+    # that the first day of an incremental update might have NaN growth if not handled.
+    # However, since we are just appending to existing JSON, the frontend or full dataset handles history.
+    # Actually, to calculate growth correctly for the NEW days, we need previous 63 days of data.
+    # But fetching that every time defeats the purpose of "incremental" for bandwidth, 
+    # though 63 days is small. 
+    # Let's keep it simple: We calculate growth based on what we fetched. 
+    # If we fetched 1 day, growth will be NaN. 
+    # Better approach for production: Fetch last 90 days + new days to calculate growth, 
+    # then only save the new days.
+    
     growth_data = market_cap_df.pct_change(periods=63)
     
     # 4. Format for JSON
@@ -135,30 +154,108 @@ def process_data(price_data, shares_data, sectors_data, names_data):
                 "name": ticker,
                 "fullname": names_data.get(ticker, ticker),
                 "category": sectors_data.get(ticker, 'Unknown'),
-                "value": market_cap,
-                "growth": growth
+                "value": int(market_cap),  # Round to integer
+                "growth": round(growth, 4)  # 4 decimal places is enough
             }
             output.append(entry)
             
     return output
 
-def main():
-    tickers = get_nasdaq_tickers()
-    print(f"Found {len(tickers)} tickers.")
-    
-    # Limit for testing if needed, but user asked for full list. 
-    # Let's do full list.
-    
-    price_data, shares_data, sectors_data, names_data = fetch_data(tickers)
-    
-    print("Processing data...")
-    json_data = process_data(price_data, shares_data, sectors_data, names_data)
-    
-    output_file = "nasdaq_data.json"
-    with open(output_file, "w") as f:
-        json.dump(json_data, f)
+def load_existing_data(filename='nasdaq_data.json'):
+    """Loads existing data and finds the last date."""
+    if not os.path.exists(filename):
+        return [], None
         
-    print(f"Done! Saved to {output_file}")
+    try:
+        with open(filename, 'r') as f:
+            data = json.load(f)
+            
+        if not data:
+            return [], None
+            
+        # Find latest date
+        dates = [d['date'] for d in data]
+        last_date_str = max(dates)
+        return data, last_date_str
+    except Exception as e:
+        print(f"Error reading existing data: {e}")
+        return [], None
+
+def main():
+    try:
+        print("Starting data update...")
+        
+        # 1. Load existing data
+        existing_data, last_date_str = load_existing_data()
+        
+        start_date = "1995-01-01"
+        if last_date_str:
+            last_date = datetime.datetime.strptime(last_date_str, "%Y-%m-%d")
+            # Start from the next day
+            start_date_dt = last_date + datetime.timedelta(days=1)
+            
+            # If next day is in the future, stop
+            if start_date_dt > datetime.datetime.now():
+                print(f"Data is already up to date (Last date: {last_date_str}).")
+                return
+
+            start_date = start_date_dt.strftime("%Y-%m-%d")
+            print(f"Found existing data up to {last_date_str}. Fetching new data from {start_date}...")
+            
+            # To calculate growth correctly, we actually need ~90 days of context.
+            # So we should fetch from (start_date - 90 days).
+            # Then we only keep data >= start_date.
+            fetch_start_dt = start_date_dt - datetime.timedelta(days=100)
+            fetch_start_date = fetch_start_dt.strftime("%Y-%m-%d")
+            print(f"Fetching context from {fetch_start_date} for growth calculation...")
+        else:
+            print("No existing data found. Performing full fetch from 1995-01-01...")
+            fetch_start_date = "1995-01-01"
+
+        print("Fetching Nasdaq 100 tickers...")
+        tickers = get_nasdaq_tickers()
+        print(f"Found {len(tickers)} tickers")
+        
+        print(f"\nFetching historical data and metadata...")
+        price_data, shares_data, sectors_data, names_data = fetch_data(tickers, start_date=fetch_start_date)
+        
+        if price_data.empty:
+            print("No data fetched.")
+            return
+
+        print("\nProcessing data...")
+        new_output = process_data(price_data, shares_data, sectors_data, names_data)
+        
+        # Filter new_output to only include dates >= start_date (if we did context fetch)
+        if last_date_str:
+            filtered_output = [d for d in new_output if d['date'] >= start_date]
+            print(f"Filtered {len(new_output)} records down to {len(filtered_output)} new records.")
+            new_output = filtered_output
+        
+        if not new_output:
+            print("No new records to add.")
+            return
+
+        # Combine with existing data
+        # We should also remove any potential overlaps if start_date logic wasn't perfect,
+        # but relying on date string comparison is usually fine.
+        # To be safe, let's remove any entries in existing_data that are >= start_date
+        # (re-write history if we re-fetched it)
+        final_output = [d for d in existing_data if d['date'] < start_date] + new_output
+        
+        # Sort by date just in case
+        # final_output.sort(key=lambda x: x['date']) # Optional, might be slow for large list
+        
+        print(f"\nSaving {len(final_output)} total records to nasdaq_data.json...")
+        with open('nasdaq_data.json', 'w') as f:
+            # Use separators to minimize whitespace
+            json.dump(final_output, f, separators=(',', ':'))
+        
+        print("Done! Saved to nasdaq_data.json")
+        
+    except Exception as e:
+        print(f"FATAL ERROR: {e}")
+        sys.exit(1) # Exit with error code for GitHub Actions
 
 if __name__ == "__main__":
     main()
