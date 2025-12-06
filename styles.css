@@ -307,32 +307,32 @@ h1 {
     }
 
     .controls {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        grid-template-areas:
-            "slider slider"
-            "play speed";
-        gap: 12px;
+        display: flex;
+        flex-wrap: wrap;
         width: 100%;
+        gap: 10px;
+        justify-content: space-between;
     }
 
     #date-slider {
-        grid-area: slider;
+        order: 1;
         width: 100%;
         margin-bottom: 5px;
     }
 
     #play-pause-btn {
-        grid-area: play;
-        width: 100%;
-        padding: 10px 0;
-        /* Compact padding */
+        order: 2;
+        width: 48%;
+        /* Slightly less than 50% to account for gap if any, but space-between handles it */
+        flex: 1 0 45%;
+        padding: 12px 0;
         font-size: 14px;
     }
 
     #speed-selector {
-        grid-area: speed;
-        width: 100%;
+        order: 3;
+        width: 48%;
+        flex: 1 0 45%;
         font-size: 14px;
         padding: 10px 0;
     }
