@@ -9,20 +9,20 @@
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://pagustafsson.github.io/NasdaqRace/">
-    <meta property="og:title" content="Nasdaq 100 Market Cap Race (30 Years)">
+    <meta property="og:title" content="Nasdaq 100 Market Cap Race">
     <meta property="og:description"
-        content="A visualization of the Nasdaq 100 market capitalization history over the last 30 years. Vibe Coded by P-A Gustafsson.">
+        content="A visualization of the Nasdaq 100 market capitalization history. Vibe Coded by P-A Gustafsson.">
     <meta property="og:image" content="https://pagustafsson.github.io/NasdaqRace/og-image.jpg">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image">
     <meta property="twitter:url" content="https://pagustafsson.github.io/NasdaqRace/">
-    <meta property="twitter:title" content="Nasdaq 100 Market Cap Race (30 Years)">
+    <meta property="twitter:title" content="Nasdaq 100 Market Cap Race">
     <meta property="twitter:description"
-        content="A visualization of the Nasdaq 100 market capitalization history over the last 30 years. Vibe Coded by P-A Gustafsson.">
+        content="A visualization of the Nasdaq 100 market capitalization history. Vibe Coded by P-A Gustafsson.">
     <meta property="twitter:image" content="https://pagustafsson.github.io/NasdaqRace/og-image.jpg">
 
-    <link rel="stylesheet" href="styles.css?v=11">
+    <link rel="stylesheet" href="styles.css?v=17">
     <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 
@@ -39,7 +39,7 @@
 
     <div class="container">
         <div class="header-row">
-            <h1>Nasdaq 100 Market Cap Race (30 Years)</h1>
+            <h1>Nasdaq 100 Market Cap Race</h1>
         </div>
         <div id="chart-container">
             <div id="ticker-date">Loading...</div>
@@ -107,7 +107,7 @@
                     topN: 8,
                     width: viewportWidth - 20,
                     height: Math.min(viewportHeight * 0.6, 500),
-                    margin: { top: 10, right: 60, bottom: 20, left: 80 }
+                    margin: { top: 0, right: 60, bottom: 0, left: 80 }
                 };
             } else if (viewportWidth <= 768) {
                 // Tablet
@@ -299,7 +299,7 @@
 
             y = d3.scaleBand()
                 .range([margin.top, height - margin.bottom])
-                .padding(0.4);
+                .padding(0.3);
 
             dateLabel = d3.select("#ticker-date");
         }
