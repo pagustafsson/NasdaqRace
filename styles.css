@@ -307,16 +307,34 @@ h1 {
     }
 
     .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+            "slider slider"
+            "play speed";
         gap: 12px;
+        width: 100%;
+    }
+
+    #date-slider {
+        grid-area: slider;
+        width: 100%;
+        margin-bottom: 5px;
     }
 
     #play-pause-btn {
-        padding: 10px 20px;
-        font-size: 13px;
+        grid-area: play;
+        width: 100%;
+        padding: 10px 0;
+        /* Compact padding */
+        font-size: 14px;
     }
 
     #speed-selector {
-        font-size: 13px;
+        grid-area: speed;
+        width: 100%;
+        font-size: 14px;
+        padding: 10px 0;
     }
 
     .modal-content {
